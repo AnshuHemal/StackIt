@@ -43,7 +43,7 @@ const NotificationsDropdown = () => {
       
       if (response.ok) {
         const data = await response.json();
-        setNotifications(data.notifications || []);
+        setNotifications(data.data?.notifications || []);
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -62,7 +62,7 @@ const NotificationsDropdown = () => {
       
       if (response.ok) {
         const data = await response.json();
-        setUnreadCount(data.count || 0);
+        setUnreadCount(data.data?.unreadCount || 0);
       }
     } catch (error) {
       console.error('Error fetching unread count:', error);
@@ -95,7 +95,7 @@ const NotificationsDropdown = () => {
 
   const markAllAsRead = async () => {
     try {
-      const response = await fetch('/api/notifications/mark-all-read', {
+      const response = await fetch('/api/notifications/read-all', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

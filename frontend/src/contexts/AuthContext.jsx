@@ -129,7 +129,22 @@ export const AuthProvider = ({ children }) => {
       });
     } catch (error) {
       dispatch({ type: 'AUTH_FAIL' });
-      throw new Error(error.response?.data?.error || 'Registration failed');
+      
+      // Better error handling
+      if (error.response?.data?.fields) {
+        // Validation errors
+        const fieldErrors = Object.values(error.response.data.fields).flat();
+        throw new Error(fieldErrors.join(', '));
+      } else if (error.response?.data?.message) {
+        // Server error message
+        throw new Error(error.response.data.message);
+      } else if (error.message === 'Network Error') {
+        // Network error
+        throw new Error('Unable to connect to server. Please check your internet connection.');
+      } else {
+        // Generic error
+        throw new Error(error.response?.data?.error || 'Registration failed. Please try again.');
+      }
     }
   };
 

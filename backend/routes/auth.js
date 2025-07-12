@@ -52,11 +52,14 @@ router.post('/register', validateRegistration, asyncHandler(async (req, res) => 
   // Generate JWT token
   const token = user.generateAuthToken();
 
-  // Send welcome email
-  try {
-    await sendWelcomeEmail(user.email, user.username);
-  } catch (error) {
-    console.error('Error sending welcome email:', error);
+  // Send welcome email (optional - won't fail registration if email fails)
+  if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    try {
+      await sendWelcomeEmail(user.email, user.username);
+    } catch (error) {
+      console.error('Error sending welcome email:', error);
+      // Don't fail registration if email fails
+    }
   }
 
   sendSuccessResponse(res, {

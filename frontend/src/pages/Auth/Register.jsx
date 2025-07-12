@@ -47,6 +47,12 @@ const Register = () => {
       return false;
     }
 
+    // Check for password complexity requirements
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+      toast.error('Password must contain at least one uppercase letter, one lowercase letter, and one number');
+      return false;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       toast.error('Passwords do not match');
       return false;
@@ -175,6 +181,9 @@ const Register = () => {
                   )}
                 </button>
               </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Password must be at least 6 characters with uppercase, lowercase, and number
+              </p>
             </div>
 
             <div>

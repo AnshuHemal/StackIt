@@ -43,8 +43,16 @@ const Questions = () => {
       const response = await fetch('/api/questions');
       if (response.ok) {
         const data = await response.json();
+        
+        // Check if data has the expected structure
+        if (!data.data || !Array.isArray(data.data.questions)) {
+          console.error('Unexpected data structure:', data);
+          toast.error('Failed to load questions - invalid data format');
+          return;
+        }
+        
         // Transform backend data to match frontend structure
-        const transformedQuestions = data.questions.map(q => ({
+        const transformedQuestions = data.data.questions.map(q => ({
           id: q._id,
           title: q.title,
           content: q.description,
