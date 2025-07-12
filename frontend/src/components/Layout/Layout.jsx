@@ -52,22 +52,6 @@ const Layout = ({ children }) => {
               >
                 Questions
               </Link>
-              <Link
-                to="/tags"
-                className={`text-sm font-medium transition-colors ${
-                  isActive('/tags') ? 'text-primary-600' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                Tags
-              </Link>
-              <Link
-                to="/users"
-                className={`text-sm font-medium transition-colors ${
-                  isActive('/users') ? 'text-primary-600' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                Users
-              </Link>
             </nav>
 
             {/* Search Bar */}
@@ -197,24 +181,6 @@ const Layout = ({ children }) => {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Questions
-              </Link>
-              <Link
-                to="/tags"
-                className={`block px-3 py-2 rounded-md text-base font-medium ${
-                  isActive('/tags') ? 'text-primary-600 bg-primary-50' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Tags
-              </Link>
-              <Link
-                to="/users"
-                className={`block px-3 py-2 rounded-md text-base font-medium ${
-                  isActive('/users') ? 'text-primary-600 bg-primary-50' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Users
               </Link>
               {isAuthenticated && (
                 <Link

@@ -145,7 +145,7 @@ userSchema.methods.generateAuthToken = function() {
       email: this.email, 
       role: this.role 
     },
-    process.env.JWT_SECRET,
+    process.env.JWT_SECRET || 'temporary-secret-key-change-this',
     { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );
 };

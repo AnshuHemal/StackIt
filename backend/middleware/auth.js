@@ -12,7 +12,7 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
 
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'temporary-secret-key-change-this');
 
       // Get user from token
       req.user = await User.findById(decoded.id).select('-password');
@@ -47,7 +47,7 @@ const optionalAuth = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'temporary-secret-key-change-this');
       req.user = await User.findById(decoded.id).select('-password');
       
       if (req.user && req.user.isBanned) {
@@ -111,7 +111,7 @@ const authenticateSocket = async (socket, next) => {
       return next();
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'temporary-secret-key-change-this');
     const user = await User.findById(decoded.id).select('-password');
     
     if (!user) {

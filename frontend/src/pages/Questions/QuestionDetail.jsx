@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { 
@@ -14,6 +14,7 @@ import {
   Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import JoditEditor from 'jodit-react';
 
 const QuestionDetail = () => {
   const { id } = useParams();
@@ -23,27 +24,47 @@ const QuestionDetail = () => {
   const [loading, setLoading] = useState(true);
   const [newAnswer, setNewAnswer] = useState('');
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [votedItems, setVotedItems] = useState(() => {
+    // Load voted items from localStorage on component mount
+    const saved = localStorage.getItem('votedItems');
+    return saved ? new Map(JSON.parse(saved)) : new Map();
+  });
+  const answerEditor = useRef(null);
 
   useEffect(() => {
-    // TODO: Fetch question and answers from API
-    // For now, using mock data
-    setQuestion({
-      id: id,
-      title: 'How to implement authentication in React with JWT?',
-      content: 'I\'m building a React application and need to implement user authentication using JWT tokens. I\'ve been looking at various tutorials but I\'m not sure about the best practices for token storage, refresh tokens, and handling authentication state. Can someone provide a comprehensive guide or point me to reliable resources?',
-      author: {
-        username: 'reactdev',
-        avatar: null,
-        reputation: 1250
-      },
-      tags: ['react', 'javascript', 'authentication', 'jwt'],
-      votes: 15,
-      views: 234,
-      answers: 3,
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-15T10:30:00Z'
-    });
+    // Try to find the question from user-created questions first
+    const userQuestions = JSON.parse(localStorage.getItem('userQuestions') || '[]');
+    const foundQuestion = userQuestions.find(q => q.id.toString() === id);
+    
+    if (foundQuestion) {
+      // Load vote counts from localStorage
+      const savedVoteCounts = JSON.parse(localStorage.getItem('questionVoteCounts') || '{}');
+      const questionWithVotes = {
+        ...foundQuestion,
+        votes: savedVoteCounts[foundQuestion.id] !== undefined ? savedVoteCounts[foundQuestion.id] : foundQuestion.votes
+      };
+      setQuestion(questionWithVotes);
+    } else {
+      // Fallback to mock data for demo questions
+      setQuestion({
+        id: id,
+        title: 'How to implement authentication in React with JWT?',
+        content: 'I\'m building a React application and need to implement user authentication using JWT tokens. I\'ve been looking at various tutorials but I\'m not sure about the best practices for token storage, refresh tokens, and handling authentication state. Can someone provide a comprehensive guide or point me to reliable resources?',
+        author: {
+          username: 'reactdev',
+          avatar: null,
+          reputation: 1250
+        },
+        tags: ['react', 'javascript', 'authentication', 'jwt'],
+        votes: 15,
+        views: 234,
+        answers: 3,
+        createdAt: '2024-01-15T10:30:00Z',
+        updatedAt: '2024-01-15T10:30:00Z'
+      });
+    }
 
+    // For now, using mock answers (in a real app, you'd fetch answers for the specific question)
     setAnswers([
       {
         id: 1,
@@ -80,7 +101,40 @@ const QuestionDetail = () => {
       return;
     }
     
-    // TODO: Implement voting logic
+    // Check if user has already voted on this item
+    if (votedItems.has(itemId)) {
+      toast.error('You have already voted on this item');
+      return;
+    }
+    
+    if (itemType === 'question') {
+      // Update question votes
+      setQuestion(prevQuestion => ({
+        ...prevQuestion,
+        votes: prevQuestion.votes + (type === 'up' ? 1 : -1)
+      }));
+    } else if (itemType === 'answer') {
+      // Update answer votes
+      setAnswers(prevAnswers => 
+        prevAnswers.map(answer => {
+          if (answer.id === itemId) {
+            return {
+              ...answer,
+              votes: answer.votes + (type === 'up' ? 1 : -1)
+            };
+          }
+          return answer;
+        })
+      );
+    }
+    
+    // Mark this item as voted with the vote type
+    const newVotedItems = new Map(votedItems);
+    newVotedItems.set(itemId, type);
+    setVotedItems(newVotedItems);
+    // Save to localStorage
+    localStorage.setItem('votedItems', JSON.stringify(Array.from(newVotedItems.entries())));
+    
     toast.success(`${type === 'up' ? 'Upvoted' : 'Downvoted'} successfully`);
   };
 
@@ -92,7 +146,9 @@ const QuestionDetail = () => {
       return;
     }
 
-    if (!newAnswer.trim()) {
+    // Strip HTML tags for content validation
+    const plainTextAnswer = newAnswer.replace(/<[^>]*>/g, '').trim();
+    if (!plainTextAnswer) {
       toast.error('Please enter an answer');
       return;
     }
@@ -166,16 +222,28 @@ const QuestionDetail = () => {
           <div className="flex flex-col items-center space-y-2">
             <button
               onClick={() => handleVote('up', question.id, 'question')}
-              className="p-2 hover:bg-gray-100 rounded"
+              className={`p-2 rounded transition-colors ${
+                votedItems.get(question.id) === 'up'
+                  ? 'bg-green-100 text-green-600 cursor-not-allowed' 
+                  : 'hover:bg-gray-100 text-gray-400 hover:text-green-600'
+              }`}
+              title="Upvote"
+              disabled={!!votedItems.get(question.id)}
             >
-              <ThumbsUp className="h-5 w-5 text-gray-400" />
+              <ThumbsUp className="h-5 w-5" />
             </button>
             <span className="text-lg font-semibold text-gray-900">{question.votes}</span>
             <button
               onClick={() => handleVote('down', question.id, 'question')}
-              className="p-2 hover:bg-gray-100 rounded"
+              className={`p-2 rounded transition-colors ${
+                votedItems.get(question.id) === 'down'
+                  ? 'bg-red-100 text-red-600 cursor-not-allowed' 
+                  : 'hover:bg-gray-100 text-gray-400 hover:text-red-600'
+              }`}
+              title="Downvote"
+              disabled={!!votedItems.get(question.id)}
             >
-              <ThumbsDown className="h-5 w-5 text-gray-400" />
+              <ThumbsDown className="h-5 w-5" />
             </button>
           </div>
 
@@ -184,7 +252,10 @@ const QuestionDetail = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-4">{question.title}</h1>
             
             <div className="prose max-w-none mb-6">
-              <p className="text-gray-700 whitespace-pre-wrap">{question.content}</p>
+              <div 
+                className="text-gray-700"
+                dangerouslySetInnerHTML={{ __html: question.content }}
+              />
             </div>
 
             {/* Tags */}
@@ -246,20 +317,32 @@ const QuestionDetail = () => {
           {answers.map((answer) => (
             <div key={answer.id} className="border-b border-gray-200 pb-6 last:border-b-0">
               <div className="flex items-start space-x-4">
-                {/* Voting */}
+                {/* Voting for answers */}
                 <div className="flex flex-col items-center space-y-2">
                   <button
                     onClick={() => handleVote('up', answer.id, 'answer')}
-                    className="p-2 hover:bg-gray-100 rounded"
+                    className={`p-2 rounded transition-colors ${
+                      votedItems.get(answer.id) === 'up'
+                        ? 'bg-green-100 text-green-600 cursor-not-allowed' 
+                        : 'hover:bg-gray-100 text-gray-400 hover:text-green-600'
+                    }`}
+                    title="Upvote"
+                    disabled={!!votedItems.get(answer.id)}
                   >
-                    <ThumbsUp className="h-5 w-5 text-gray-400" />
+                    <ThumbsUp className="h-5 w-5" />
                   </button>
                   <span className="text-lg font-semibold text-gray-900">{answer.votes}</span>
                   <button
                     onClick={() => handleVote('down', answer.id, 'answer')}
-                    className="p-2 hover:bg-gray-100 rounded"
+                    className={`p-2 rounded transition-colors ${
+                      votedItems.get(answer.id) === 'down'
+                        ? 'bg-red-100 text-red-600 cursor-not-allowed' 
+                        : 'hover:bg-gray-100 text-gray-400 hover:text-red-600'
+                    }`}
+                    title="Downvote"
+                    disabled={!!votedItems.get(answer.id)}
                   >
-                    <ThumbsDown className="h-5 w-5 text-gray-400" />
+                    <ThumbsDown className="h-5 w-5" />
                   </button>
                   {answer.isAccepted && (
                     <div className="mt-2">
@@ -273,7 +356,10 @@ const QuestionDetail = () => {
                 {/* Answer Content */}
                 <div className="flex-1">
                   <div className="prose max-w-none mb-4">
-                    <p className="text-gray-700 whitespace-pre-wrap">{answer.content}</p>
+                    <div 
+                      className="text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: answer.content }}
+                    />
                   </div>
 
                   {/* Answer Meta */}
@@ -313,13 +399,57 @@ const QuestionDetail = () => {
           <div className="mt-8 pt-6 border-t border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Answer</h3>
             <form onSubmit={handleSubmitAnswer}>
-              <textarea
-                value={newAnswer}
-                onChange={(e) => setNewAnswer(e.target.value)}
-                rows={6}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                placeholder="Write your answer here..."
-              />
+              <div className="border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
+                <JoditEditor
+                  ref={answerEditor}
+                  value={newAnswer}
+                  config={{
+                    placeholder: "Write your answer here...",
+                    height: 200,
+                    toolbar: [
+                      'source', '|',
+                      'bold', 'italic', 'underline', 'strikethrough', '|',
+                      'font', 'fontsize', 'brush', 'paragraph', '|',
+                      'image', 'link', 'table', '|',
+                      'align', 'undo', 'redo', '|',
+                      'hr', 'eraser', 'copyformat', '|',
+                      'fullsize'
+                    ],
+                    buttons: [
+                      'source', '|',
+                      'bold', 'italic', 'underline', 'strikethrough', '|',
+                      'font', 'fontsize', 'brush', 'paragraph', '|',
+                      'image', 'link', 'table', '|',
+                      'align', 'undo', 'redo', '|',
+                      'hr', 'eraser', 'copyformat', '|',
+                      'fullsize'
+                    ],
+                    uploader: {
+                      insertImageAsBase64URI: true
+                    },
+                    showCharsCounter: true,
+                    showWordsCounter: true,
+                    showXPathInStatusbar: false,
+                    askBeforePasteHTML: true,
+                    askBeforePasteFromWord: true,
+                    defaultActionOnPaste: 'insert_clear_html',
+                    spellcheck: true,
+                    language: 'en',
+                    colorPickerDefaultTab: 'background',
+                    imageDefaultWidth: 300,
+                    removeButtons: ['about', 'print'],
+                    disablePlugins: 'paste-as-html',
+                    events: {
+                      beforePaste: function (event, html) {
+                        // Clean up pasted content
+                        return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+                      }
+                    }
+                  }}
+                  onBlur={(newContent) => setNewAnswer(newContent)}
+                  onChange={(newContent) => setNewAnswer(newContent)}
+                />
+              </div>
               <div className="mt-4 flex justify-end">
                 <button
                   type="submit"

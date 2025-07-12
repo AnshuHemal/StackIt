@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { Tag, HelpCircle, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import JoditEditor from 'jodit-react';
 
 const AskQuestion = () => {
   const [formData, setFormData] = useState({
@@ -13,13 +14,67 @@ const AskQuestion = () => {
   });
   const [loading, setLoading] = useState(false);
   
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
+  const editor = useRef(null);
+
+  // Memoize Jodit config
+  const joditConfig = useMemo(() => ({
+    placeholder: "Provide detailed information about your question. Include relevant context, code examples, or specific scenarios.",
+    height: 300,
+    toolbar: [
+      'source', '|',
+      'bold', 'italic', 'underline', 'strikethrough', '|',
+      'font', 'fontsize', 'brush', 'paragraph', '|',
+      'image', 'link', 'table', '|',
+      'align', 'undo', 'redo', '|',
+      'hr', 'eraser', 'copyformat', '|',
+      'fullsize', 'print', 'about'
+    ],
+    buttons: [
+      'source', '|',
+      'bold', 'italic', 'underline', 'strikethrough', '|',
+      'font', 'fontsize', 'brush', 'paragraph', '|',
+      'image', 'link', 'table', '|',
+      'align', 'undo', 'redo', '|',
+      'hr', 'eraser', 'copyformat', '|',
+      'fullsize', 'print', 'about'
+    ],
+    uploader: {
+      insertImageAsBase64URI: true
+    },
+    showCharsCounter: true,
+    showWordsCounter: true,
+    showXPathInStatusbar: false,
+    askBeforePasteHTML: true,
+    askBeforePasteFromWord: true,
+    defaultActionOnPaste: 'insert_clear_html',
+    spellcheck: true,
+    language: 'en',
+    colorPickerDefaultTab: 'background',
+    imageDefaultWidth: 300,
+    removeButtons: ['about', 'print'],
+    disablePlugins: 'paste-as-html',
+    events: {
+      beforePaste: function (event, html) {
+        // Clean up pasted content
+        return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      }
+    }
+  }), []);
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
+    });
+  };
+
+  // Only update state on blur
+  const handleEditorChange = (newContent) => {
+    setFormData({
+      ...formData,
+      content: newContent
     });
   };
 
@@ -42,7 +97,9 @@ const AskQuestion = () => {
       return;
     }
 
-    if (formData.content.length < 20) {
+    // Strip HTML tags for content length validation
+    const plainTextContent = formData.content.replace(/<[^>]*>/g, '').trim();
+    if (plainTextContent.length < 20) {
       toast.error('Content must be at least 20 characters long');
       return;
     }
@@ -50,17 +107,36 @@ const AskQuestion = () => {
     setLoading(true);
     
     try {
-      // TODO: Implement API call to create question
-      const questionData = {
+      // Create new question with proper structure
+      const newQuestion = {
+        id: Date.now(), // Generate unique ID
         title: formData.title,
         content: formData.content,
+        author: {
+          username: user?.username || 'anonymous',
+          reputation: user?.reputation || 0
+        },
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-        category: formData.category
+        category: formData.category,
+        votes: 0,
+        answers: 0,
+        views: 0,
+        createdAt: new Date().toISOString(),
+        isAnswered: false
       };
       
-      console.log('Question data:', questionData);
+      // Get existing questions from localStorage
+      const existingQuestions = JSON.parse(localStorage.getItem('userQuestions') || '[]');
+      
+      // Add new question to the beginning
+      const updatedQuestions = [newQuestion, ...existingQuestions];
+      
+      // Save back to localStorage
+      localStorage.setItem('userQuestions', JSON.stringify(updatedQuestions));
+      
+      console.log('Question posted:', newQuestion);
       toast.success('Question posted successfully!');
-      navigate('/');
+      navigate('/questions');
     } catch (error) {
       toast.error('Failed to post question');
     } finally {
@@ -146,17 +222,16 @@ const AskQuestion = () => {
             <label htmlFor="content" className="block text-sm font-medium text-gray-700 mb-2">
               Question Details *
             </label>
-            <textarea
-              id="content"
-              name="content"
-              rows={8}
-              value={formData.content}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="Provide detailed information about your question. Include relevant context, code examples, or specific scenarios."
-            />
+            <div className="border text-start border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
+              <JoditEditor
+                ref={editor}
+                value={formData.content}
+                config={joditConfig}
+                onBlur={handleEditorChange}
+              />
+            </div>
             <p className="mt-1 text-sm text-gray-500">
-              {formData.content.length} characters
+              {formData.content.replace(/<[^>]*>/g, '').length} characters (excluding HTML tags)
             </p>
           </div>
 

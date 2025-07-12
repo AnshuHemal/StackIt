@@ -94,7 +94,7 @@ const connectDB = async () => {
     const conn = await mongoose.connect(
       process.env.NODE_ENV === 'production' 
         ? process.env.MONGODB_URI_PROD 
-        : process.env.MONGODB_URI || 'mongodb://localhost:27017/stackit'
+        : process.env.MONGODB_URI || 'mongodb+srv://whiteturtle1:dvIw4evFuDVOzea3@cluster0.1e4vx.mongodb.net/odoo_hackathon?retryWrites=true&w=majority&appName=Cluster0'
     );
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
