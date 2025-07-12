@@ -107,37 +107,31 @@ const AskQuestion = () => {
     setLoading(true);
     
     try {
-      // Create new question with proper structure
-      const newQuestion = {
-        id: Date.now(), // Generate unique ID
-        title: formData.title,
-        content: formData.content,
-        author: {
-          username: user?.username || 'anonymous',
-          reputation: user?.reputation || 0
+      // Post question to backend API
+      const response = await fetch('/api/questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-        category: formData.category,
-        votes: 0,
-        answers: 0,
-        views: 0,
-        createdAt: new Date().toISOString(),
-        isAnswered: false
-      };
-      
-      // Get existing questions from localStorage
-      const existingQuestions = JSON.parse(localStorage.getItem('userQuestions') || '[]');
-      
-      // Add new question to the beginning
-      const updatedQuestions = [newQuestion, ...existingQuestions];
-      
-      // Save back to localStorage
-      localStorage.setItem('userQuestions', JSON.stringify(updatedQuestions));
-      
-      console.log('Question posted:', newQuestion);
-      toast.success('Question posted successfully!');
-      navigate('/questions');
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.content,
+          tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Question posted:', data.question);
+        toast.success('Question posted successfully!');
+        navigate('/questions');
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to post question');
+      }
     } catch (error) {
+      console.error('Error posting question:', error);
       toast.error('Failed to post question');
     } finally {
       setLoading(false);

@@ -255,6 +255,22 @@ notificationSchema.statics.createAdminNotification = function(recipientId, title
   });
 };
 
+// Static method to create comment notification
+notificationSchema.statics.createCommentNotification = function(questionId, commentId, senderId, recipientId, questionTitle) {
+  return this.createNotification({
+    recipient: recipientId,
+    sender: senderId,
+    type: 'comment_posted',
+    title: 'New comment on your question',
+    message: `Someone commented on your question "${questionTitle}"`,
+    data: {
+      questionId: questionId,
+      commentId: commentId
+    },
+    priority: 'medium'
+  });
+};
+
 // Pre-save middleware to set expiration for certain types
 notificationSchema.pre('save', function(next) {
   if (!this.expiresAt) {

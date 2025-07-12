@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { Bell, Search, Menu, X, User, LogOut, Settings } from 'lucide-react';
+import NotificationsDropdown from '../Notifications/NotificationsDropdown.jsx';
 
 const Layout = ({ children }) => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -69,12 +70,7 @@ const Layout = ({ children }) => {
             {/* User Menu */}
             <div className="flex items-center space-x-4">
               {/* Notifications */}
-              {isAuthenticated && (
-                <button className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-400"></span>
-                </button>
-              )}
+              {isAuthenticated && <NotificationsDropdown />}
 
               {/* Ask Question Button */}
               {isAuthenticated && (
@@ -201,14 +197,7 @@ const Layout = ({ children }) => {
         {children}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center text-gray-500 text-sm">
-            <p>&copy; 2024 StackIt. Built with ❤️ for collaborative learning.</p>
-          </div>
-        </div>
-      </footer>
+
     </div>
   );
 };

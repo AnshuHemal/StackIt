@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import JoditEditor from 'jodit-react';
+import Comments from '../../components/Comments/Comments.jsx';
 
 const QuestionDetail = () => {
   const { id } = useParams();
@@ -32,70 +33,76 @@ const QuestionDetail = () => {
   const answerEditor = useRef(null);
 
   useEffect(() => {
-    // Try to find the question from user-created questions first
-    const userQuestions = JSON.parse(localStorage.getItem('userQuestions') || '[]');
-    const foundQuestion = userQuestions.find(q => q.id.toString() === id);
-    
-    if (foundQuestion) {
-      // Load vote counts from localStorage
-      const savedVoteCounts = JSON.parse(localStorage.getItem('questionVoteCounts') || '{}');
-      const questionWithVotes = {
-        ...foundQuestion,
-        votes: savedVoteCounts[foundQuestion.id] !== undefined ? savedVoteCounts[foundQuestion.id] : foundQuestion.votes
-      };
-      setQuestion(questionWithVotes);
-    } else {
-      // Fallback to mock data for demo questions
-    setQuestion({
-      id: id,
-      title: 'How to implement authentication in React with JWT?',
-      content: 'I\'m building a React application and need to implement user authentication using JWT tokens. I\'ve been looking at various tutorials but I\'m not sure about the best practices for token storage, refresh tokens, and handling authentication state. Can someone provide a comprehensive guide or point me to reliable resources?',
-      author: {
-        username: 'reactdev',
-        avatar: null,
-        reputation: 1250
-      },
-      tags: ['react', 'javascript', 'authentication', 'jwt'],
-      votes: 15,
-      views: 234,
-      answers: 3,
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-15T10:30:00Z'
-    });
-    }
-
-    // For now, using mock answers (in a real app, you'd fetch answers for the specific question)
-    setAnswers([
-      {
-        id: 1,
-        content: 'Here\'s a comprehensive approach to JWT authentication in React:\n\n1. **Token Storage**: Use httpOnly cookies for security or localStorage for convenience\n2. **State Management**: Use Context API or Redux for auth state\n3. **Token Refresh**: Implement automatic token refresh\n4. **Route Protection**: Create protected route components',
-        author: {
-          username: 'auth_expert',
-          avatar: null,
-          reputation: 2100
-        },
-        votes: 8,
-        isAccepted: true,
-        createdAt: '2024-01-15T11:00:00Z'
-      },
-      {
-        id: 2,
-        content: 'I recommend using a library like Auth0 or Firebase Auth for production applications. They handle most of the security concerns for you.',
-        author: {
-          username: 'senior_dev',
-          avatar: null,
-          reputation: 1800
-        },
-        votes: 5,
-        isAccepted: false,
-        createdAt: '2024-01-15T12:30:00Z'
-      }
-    ]);
-
-    setLoading(false);
+    fetchQuestion();
   }, [id]);
 
-  const handleVote = (type, itemId, itemType) => {
+  const fetchQuestion = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/questions/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Transform backend data to match frontend structure
+        const transformedQuestion = {
+          id: data.question._id,
+          title: data.question.title,
+          content: data.question.description,
+          author: {
+            username: data.question.author.username,
+            avatar: data.question.author.avatar,
+            reputation: data.question.author.reputation || 0
+          },
+          tags: data.question.tags,
+          votes: data.question.voteCount || 0,
+          views: data.question.views || 0,
+          answers: data.question.answerCount || 0,
+          createdAt: data.question.createdAt,
+          updatedAt: data.question.updatedAt
+        };
+        setQuestion(transformedQuestion);
+        
+        // Fetch answers for this question
+        await fetchAnswers();
+      } else {
+        console.error('Failed to fetch question');
+        toast.error('Failed to load question');
+      }
+    } catch (error) {
+      console.error('Error fetching question:', error);
+      toast.error('Failed to load question');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAnswers = async () => {
+    try {
+      const response = await fetch(`/api/questions/${id}/answers`);
+      if (response.ok) {
+        const data = await response.json();
+        // Transform backend answers data to match frontend structure
+        const transformedAnswers = data.answers.map(answer => ({
+          id: answer._id,
+          content: answer.content,
+          author: {
+            username: answer.author.username,
+            avatar: answer.author.avatar,
+            reputation: answer.author.reputation || 0
+          },
+          votes: answer.voteCount || 0,
+          isAccepted: answer.isAccepted || false,
+          createdAt: answer.createdAt
+        }));
+        setAnswers(transformedAnswers);
+      } else {
+        console.error('Failed to fetch answers');
+      }
+    } catch (error) {
+      console.error('Error fetching answers:', error);
+    }
+  };
+
+  const handleVote = async (type, itemId, itemType) => {
     if (!isAuthenticated) {
       toast.error('Please log in to vote');
       return;
@@ -107,35 +114,62 @@ const QuestionDetail = () => {
       return;
     }
     
-    if (itemType === 'question') {
-      // Update question votes
-      setQuestion(prevQuestion => ({
-        ...prevQuestion,
-        votes: prevQuestion.votes + (type === 'up' ? 1 : -1)
-      }));
-    } else if (itemType === 'answer') {
-      // Update answer votes
-      setAnswers(prevAnswers => 
-        prevAnswers.map(answer => {
-          if (answer.id === itemId) {
-            return {
-              ...answer,
-              votes: answer.votes + (type === 'up' ? 1 : -1)
-            };
-          }
-          return answer;
+    try {
+      const endpoint = itemType === 'question' 
+        ? `/api/questions/${itemId}/vote`
+        : `/api/answers/${itemId}/vote`;
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          voteType: type === 'up' ? 'upvote' : 'downvote'
         })
-      );
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (itemType === 'question') {
+          // Update question votes
+          setQuestion(prevQuestion => ({
+            ...prevQuestion,
+            votes: data.voteCount
+          }));
+        } else if (itemType === 'answer') {
+          // Update answer votes
+          setAnswers(prevAnswers => 
+            prevAnswers.map(answer => {
+              if (answer.id === itemId) {
+                return {
+                  ...answer,
+                  votes: data.voteCount
+                };
+              }
+              return answer;
+            })
+          );
+        }
+        
+        // Mark this item as voted with the vote type
+        const newVotedItems = new Map(votedItems);
+        newVotedItems.set(itemId, type);
+        setVotedItems(newVotedItems);
+        // Save to localStorage
+        localStorage.setItem('votedItems', JSON.stringify(Array.from(newVotedItems.entries())));
+        
+        toast.success(`${type === 'up' ? 'Upvoted' : 'Downvoted'} successfully`);
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to vote');
+      }
+    } catch (error) {
+      console.error('Error voting on item:', error);
+      toast.error('Failed to vote on item');
     }
-    
-    // Mark this item as voted with the vote type
-    const newVotedItems = new Map(votedItems);
-    newVotedItems.set(itemId, type);
-    setVotedItems(newVotedItems);
-    // Save to localStorage
-    localStorage.setItem('votedItems', JSON.stringify(Array.from(newVotedItems.entries())));
-    
-    toast.success(`${type === 'up' ? 'Upvoted' : 'Downvoted'} successfully`);
   };
 
   const handleSubmitAnswer = async (e) => {
@@ -156,24 +190,43 @@ const QuestionDetail = () => {
     setSubmittingAnswer(true);
     
     try {
-      // TODO: Submit answer to API
-      const answer = {
-        id: Date.now(),
-        content: newAnswer,
-        author: {
-          username: user.username,
-          avatar: user.avatar,
-          reputation: user.reputation
+      const response = await fetch(`/api/questions/${id}/answers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        votes: 0,
-        isAccepted: false,
-        createdAt: new Date().toISOString()
-      };
-      
-      setAnswers([...answers, answer]);
-      setNewAnswer('');
-      toast.success('Answer posted successfully!');
+        body: JSON.stringify({
+          content: newAnswer
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Transform backend answer data to match frontend structure
+        const newAnswer = {
+          id: data.answer._id,
+          content: data.answer.content,
+          author: {
+            username: data.answer.author.username,
+            avatar: data.answer.author.avatar,
+            reputation: data.answer.author.reputation || 0
+          },
+          votes: data.answer.voteCount || 0,
+          isAccepted: data.answer.isAccepted || false,
+          createdAt: data.answer.createdAt
+        };
+        
+        setAnswers([...answers, newAnswer]);
+        setNewAnswer('');
+        toast.success('Answer posted successfully!');
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to post answer');
+      }
     } catch (error) {
+      console.error('Error posting answer:', error);
       toast.error('Failed to post answer');
     } finally {
       setSubmittingAnswer(false);
@@ -288,6 +341,10 @@ const QuestionDetail = () => {
                   <Eye className="h-4 w-4 mr-1" />
                   {question.views} views
                 </div>
+                <div className="flex items-center">
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  {question.commentCount || 0} comments
+                </div>
               </div>
               
               <div className="flex items-center space-x-2">
@@ -304,6 +361,20 @@ const QuestionDetail = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Comments Section */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-6">
+          Comments
+        </h2>
+        <Comments 
+          questionId={question.id} 
+          onCommentAdded={(comment) => {
+            // Update question comment count if needed
+            console.log('New comment added:', comment);
+          }}
+        />
       </div>
 
       {/* Answers Section */}
