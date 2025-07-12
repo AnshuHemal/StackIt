@@ -46,22 +46,22 @@ const QuestionDetail = () => {
       setQuestion(questionWithVotes);
     } else {
       // Fallback to mock data for demo questions
-      setQuestion({
-        id: id,
-        title: 'How to implement authentication in React with JWT?',
-        content: 'I\'m building a React application and need to implement user authentication using JWT tokens. I\'ve been looking at various tutorials but I\'m not sure about the best practices for token storage, refresh tokens, and handling authentication state. Can someone provide a comprehensive guide or point me to reliable resources?',
-        author: {
-          username: 'reactdev',
-          avatar: null,
-          reputation: 1250
-        },
-        tags: ['react', 'javascript', 'authentication', 'jwt'],
-        votes: 15,
-        views: 234,
-        answers: 3,
-        createdAt: '2024-01-15T10:30:00Z',
-        updatedAt: '2024-01-15T10:30:00Z'
-      });
+    setQuestion({
+      id: id,
+      title: 'How to implement authentication in React with JWT?',
+      content: 'I\'m building a React application and need to implement user authentication using JWT tokens. I\'ve been looking at various tutorials but I\'m not sure about the best practices for token storage, refresh tokens, and handling authentication state. Can someone provide a comprehensive guide or point me to reliable resources?',
+      author: {
+        username: 'reactdev',
+        avatar: null,
+        reputation: 1250
+      },
+      tags: ['react', 'javascript', 'authentication', 'jwt'],
+      votes: 15,
+      views: 234,
+      answers: 3,
+      createdAt: '2024-01-15T10:30:00Z',
+      updatedAt: '2024-01-15T10:30:00Z'
+    });
     }
 
     // For now, using mock answers (in a real app, you'd fetch answers for the specific question)
@@ -402,7 +402,7 @@ const QuestionDetail = () => {
               <div className="border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
                 <JoditEditor
                   ref={answerEditor}
-                  value={newAnswer}
+                value={newAnswer}
                   config={{
                     placeholder: "Write your answer here...",
                     height: 200,
