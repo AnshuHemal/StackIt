@@ -1,20 +1,26 @@
 {
-  "name": "stackit",
+  "name": "odoo-hackathon",
   "version": "1.0.0",
-  "description": "A minimal Q&A forum platform built with MERN stack",
+  "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd backend && npm run dev",
-    "client": "cd frontend && npm start",
-    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "build": "cd frontend && npm run build",
-    "start": "cd backend && npm start"
+    "dev": "nodemon backend/server.js"
   },
-  "keywords": ["mern", "forum", "qa", "stackoverflow"],
-  "author": "StackIt Team",
-  "license": "MIT",
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cheerio": "^1.1.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.3",
+    "multer": "^2.0.1",
+    "nodemailer": "^7.0.5",
+    "nodemon": "^3.1.10"
   }
-} 
+}
