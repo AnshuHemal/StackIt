@@ -177,6 +177,24 @@ router.get('/search', optionalAuth, validateSearch, asyncHandler(async (req, res
   sendSuccessResponse(res, { questions });
 }));
 
+// @route   GET /api/questions/:id/answers
+// @desc    Get all answers for a question
+// @access  Public
+router.get('/:id/answers', asyncHandler(async (req, res) => {
+  const questionId = req.params.id;
+  const question = await Question.findById(questionId);
+  if (!question) {
+    return sendErrorResponse(res, {
+      message: 'Question not found',
+      statusCode: 404
+    });
+  }
+  const answers = await Answer.find({ question: questionId })
+    .sort({ voteCount: -1, createdAt: 1 })
+    .populate('author', 'username avatar reputation');
+  sendSuccessResponse(res, { answers });
+}));
+
 // @route   GET /api/questions/:id
 // @desc    Get single question by ID
 // @access  Public
@@ -565,6 +583,51 @@ router.post('/:id/upload', protect, validateId, checkOwnership('Question'), uplo
   await question.save();
 
   sendSuccessResponse(res, { attachments: uploadedFiles }, 'Files uploaded successfully');
+}));
+
+// @route   POST /api/questions/:id/answers
+// @desc    Post a new answer to a question
+// @access  Private
+router.post('/:id/answers', protect, validateId, rateLimitByUser(10, 60 * 60 * 1000), asyncHandler(async (req, res) => {
+  console.log('POST /api/questions/:id/answers', req.params, req.body);
+  const questionId = req.params.id;
+  const { content } = req.body;
+
+  // Remove minimum length validation, only check for non-empty content
+  if (!content || !content.trim()) {
+    console.log('Validation failed: content missing', content);
+    return sendErrorResponse(res, {
+      message: 'Answer content is required',
+      statusCode: 400,
+      details: { content }
+    });
+  }
+
+  const question = await Question.findById(questionId);
+  if (!question) {
+    console.log('Validation failed: question not found', questionId);
+    return sendErrorResponse(res, {
+      message: 'Question not found',
+      statusCode: 404,
+      details: { questionId }
+    });
+  }
+
+  // Create answer
+  const answer = await Answer.create({
+    content: content.trim(),
+    author: req.user._id,
+    question: questionId
+  });
+
+  // Update answer count on question
+  question.answerCount = (question.answerCount || 0) + 1;
+  await question.save();
+
+  // Populate author info
+  await answer.populate('author', 'username avatar reputation');
+
+  sendSuccessResponse(res, { answer }, 'Answer posted successfully', 201);
 }));
 
 module.exports = router; 

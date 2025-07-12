@@ -4,7 +4,7 @@ const answerSchema = new mongoose.Schema({
   content: {
     type: String,
     required: [true, 'Answer content is required'],
-    minlength: [20, 'Answer must be at least 20 characters long'],
+    minlength: [1, 'Answer content is required'],
     maxlength: [15000, 'Answer cannot exceed 15000 characters']
   },
   question: {

@@ -57,8 +57,8 @@ const Comments = ({ questionId, answerId, onCommentAdded }) => {
       return;
     }
 
-    if (!newComment.trim() || newComment.trim().length < 15) {
-      toast.error('Comment must be at least 15 characters long');
+    if (!newComment.trim()) {
+      toast.error('Comment cannot be empty');
       return;
     }
 
@@ -88,8 +88,20 @@ const Comments = ({ questionId, answerId, onCommentAdded }) => {
           onCommentAdded(data.comment);
         }
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to post comment');
+        let errorMessage = 'Failed to post comment';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error('Error posting comment:', error);
@@ -139,8 +151,20 @@ const Comments = ({ questionId, answerId, onCommentAdded }) => {
 
         toast.success(`${voteType === 'upvote' ? 'Upvoted' : 'Downvoted'} successfully`);
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to vote');
+        let errorMessage = 'Failed to vote';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error('Error voting on comment:', error);
@@ -165,8 +189,20 @@ const Comments = ({ questionId, answerId, onCommentAdded }) => {
         setComments(prev => prev.filter(comment => comment._id !== commentId));
         toast.success('Comment deleted successfully');
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to delete comment');
+        let errorMessage = 'Failed to delete comment';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error('Error deleting comment:', error);
@@ -192,7 +228,7 @@ const Comments = ({ questionId, answerId, onCommentAdded }) => {
       {/* Comments List */}
       {comments.length > 0 && (
         <div className="space-y-4">
-          {comments.map((comment) => (
+          {comments.filter(Boolean).map((comment) => (
             <div key={comment._id} className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-start space-x-3">
                 {/* Voting */}
@@ -293,8 +329,7 @@ const Comments = ({ questionId, answerId, onCommentAdded }) => {
               </span>
               <button
                 type="submit"
-                disabled={submitting || newComment.trim().length < 15}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ml-2 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
               >
                 {submitting ? 'Posting...' : 'Post Comment'}
               </button>

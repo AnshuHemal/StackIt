@@ -11,10 +11,12 @@ import {
   User,
   Clock,
   Eye,
-  Tag
+  Tag,
+  BookmarkCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import JoditEditor from 'jodit-react';
+// Remove JoditEditor import
+// import JoditEditor from 'jodit-react';
 import Comments from '../../components/Comments/Comments.jsx';
 
 const QuestionDetail = () => {
@@ -30,7 +32,77 @@ const QuestionDetail = () => {
     const saved = localStorage.getItem('votedItems');
     return saved ? new Map(JSON.parse(saved)) : new Map();
   });
+  const [notFound, setNotFound] = useState(false);
   const answerEditor = useRef(null);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [openCommentAnswerId, setOpenCommentAnswerId] = useState(null);
+
+  // Check bookmark status on mount or question change
+  useEffect(() => {
+    if (question) {
+      const bookmarks = JSON.parse(localStorage.getItem('bookmarkedQuestions') || '[]');
+      setIsBookmarked(bookmarks.includes(question.id));
+    }
+  }, [question]);
+
+  const handleBookmark = () => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to bookmark questions');
+      return;
+    }
+    const bookmarks = JSON.parse(localStorage.getItem('bookmarkedQuestions') || '[]');
+    let updated;
+    if (isBookmarked) {
+      updated = bookmarks.filter(qid => qid !== question.id);
+      toast('Removed from bookmarks');
+    } else {
+      updated = [...bookmarks, question.id];
+      toast('Bookmarked!');
+    }
+    localStorage.setItem('bookmarkedQuestions', JSON.stringify(updated));
+    setIsBookmarked(!isBookmarked);
+  };
+
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        toast.success('Link copied to clipboard!');
+      })
+      .catch(() => {
+        toast.error('Failed to copy link');
+      });
+  };
+
+  const handleFlag = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to flag questions');
+      return;
+    }
+    const reason = window.prompt('Why are you flagging this question? (e.g. spam, offensive, duplicate, other)');
+    if (!reason || !reason.trim()) {
+      toast('Flag cancelled');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/questions/${question.id}/flag`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      if (response.ok) {
+        toast.success('Question flagged for moderation');
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to flag question');
+      }
+    } catch (error) {
+      toast.error('Failed to flag question');
+    }
+  };
 
   useEffect(() => {
     fetchQuestion();
@@ -38,38 +110,52 @@ const QuestionDetail = () => {
 
   const fetchQuestion = async () => {
     setLoading(true);
+    setNotFound(false);
     try {
       const response = await fetch(`/api/questions/${id}`);
       if (response.ok) {
         const data = await response.json();
+        // Defensive check for backend structure
+        if (!data.data || !data.data.question) {
+          setQuestion(null);
+          setNotFound(true);
+          return;
+        }
         // Transform backend data to match frontend structure
+        const q = data.data.question;
         const transformedQuestion = {
-          id: data.question._id,
-          title: data.question.title,
-          content: data.question.description,
+          id: q._id,
+          title: q.title,
+          content: q.description,
           author: {
-            username: data.question.author.username,
-            avatar: data.question.author.avatar,
-            reputation: data.question.author.reputation || 0
+            username: q.author.username,
+            avatar: q.author.avatar,
+            reputation: q.author.reputation || 0
           },
-          tags: data.question.tags,
-          votes: data.question.voteCount || 0,
-          views: data.question.views || 0,
-          answers: data.question.answerCount || 0,
-          createdAt: data.question.createdAt,
-          updatedAt: data.question.updatedAt
+          tags: q.tags,
+          votes: q.voteCount || 0,
+          views: q.views || 0,
+          answers: q.answerCount || 0,
+          createdAt: q.createdAt,
+          updatedAt: q.updatedAt
         };
         setQuestion(transformedQuestion);
-        
         // Fetch answers for this question
         await fetchAnswers();
+      } else if (response.status === 404) {
+        setQuestion(null);
+        setNotFound(true);
       } else {
         console.error('Failed to fetch question');
         toast.error('Failed to load question');
+        setQuestion(null);
+        setNotFound(true);
       }
     } catch (error) {
       console.error('Error fetching question:', error);
       toast.error('Failed to load question');
+      setQuestion(null);
+      setNotFound(true);
     } finally {
       setLoading(false);
     }
@@ -80,8 +166,9 @@ const QuestionDetail = () => {
       const response = await fetch(`/api/questions/${id}/answers`);
       if (response.ok) {
         const data = await response.json();
-        // Transform backend answers data to match frontend structure
-        const transformedAnswers = data.answers.map(answer => ({
+        // Defensive: ensure data.answers is an array
+        const answersArr = (data.answers || data.data?.answers || []);
+        const transformedAnswers = answersArr.map(answer => ({
           id: answer._id,
           content: answer.content,
           author: {
@@ -163,8 +250,20 @@ const QuestionDetail = () => {
         
         toast.success(`${type === 'up' ? 'Upvoted' : 'Downvoted'} successfully`);
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to vote');
+        let errorMessage = 'Failed to vote';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error('Error voting on item:', error);
@@ -174,21 +273,16 @@ const QuestionDetail = () => {
 
   const handleSubmitAnswer = async (e) => {
     e.preventDefault();
-    
     if (!isAuthenticated) {
       toast.error('Please log in to answer');
       return;
     }
-
-    // Strip HTML tags for content validation
-    const plainTextAnswer = newAnswer.replace(/<[^>]*>/g, '').trim();
-    if (!plainTextAnswer) {
+    // Only check for non-empty input
+    if (!newAnswer.trim()) {
       toast.error('Please enter an answer');
       return;
     }
-
     setSubmittingAnswer(true);
-    
     try {
       const response = await fetch(`/api/questions/${id}/answers`, {
         method: 'POST',
@@ -200,12 +294,14 @@ const QuestionDetail = () => {
           content: newAnswer
         })
       });
-
-      if (response.ok) {
+      if (response.status === 200 || response.status === 201) {
         const data = await response.json();
-        
+        if (!data.answer) {
+          toast.error('No answer returned from server');
+          return;
+        }
         // Transform backend answer data to match frontend structure
-        const newAnswer = {
+        const newAnswerObj = {
           id: data.answer._id,
           content: data.answer.content,
           author: {
@@ -217,13 +313,24 @@ const QuestionDetail = () => {
           isAccepted: data.answer.isAccepted || false,
           createdAt: data.answer.createdAt
         };
-        
-        setAnswers([...answers, newAnswer]);
+        setAnswers(prev => [...prev, newAnswerObj]);
         setNewAnswer('');
         toast.success('Answer posted successfully!');
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to post answer');
+        let errorMessage = 'Failed to post answer';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
       }
     } catch (error) {
       console.error('Error posting answer:', error);
@@ -231,6 +338,17 @@ const QuestionDetail = () => {
     } finally {
       setSubmittingAnswer(false);
     }
+  };
+
+  const handleShareAnswer = (answerId) => {
+    const url = `${window.location.origin}/questions/${id}#answer-${answerId}`;
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        toast.success('Answer link copied to clipboard!');
+      })
+      .catch(() => {
+        toast.error('Failed to copy link');
+      });
   };
 
   if (loading) {
@@ -245,6 +363,16 @@ const QuestionDetail = () => {
             <div className="h-4 bg-gray-200 rounded w-4/6"></div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <h1 className="text-2xl font-bold mb-2">Question Not Found</h1>
+        <p className="mb-4 text-gray-600">The question you're looking for doesn't exist or has been removed.</p>
+        <Link to="/questions" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">Back to Questions</Link>
       </div>
     );
   }
@@ -348,13 +476,21 @@ const QuestionDetail = () => {
               </div>
               
               <div className="flex items-center space-x-2">
-                <button className="p-1 hover:bg-gray-100 rounded">
+                <button className="p-1 hover:bg-gray-100 rounded" onClick={handleShare} title="Share">
                   <Share2 className="h-4 w-4" />
                 </button>
-                <button className="p-1 hover:bg-gray-100 rounded">
-                  <Bookmark className="h-4 w-4" />
+                <button
+                  className={`p-1 hover:bg-gray-100 rounded ${isBookmarked ? 'text-yellow-500' : ''}`}
+                  onClick={handleBookmark}
+                  title={isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
+                >
+                  {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
                 </button>
-                <button className="p-1 hover:bg-gray-100 rounded">
+                <button
+                  className="p-1 hover:bg-gray-100 rounded"
+                  onClick={handleFlag}
+                  title="Flag for moderation"
+                >
                   <Flag className="h-4 w-4" />
                 </button>
               </div>
@@ -371,8 +507,10 @@ const QuestionDetail = () => {
         <Comments 
           questionId={question.id} 
           onCommentAdded={(comment) => {
-            // Update question comment count if needed
-            console.log('New comment added:', comment);
+            setQuestion(prev => ({
+              ...prev,
+              commentCount: (prev.commentCount || 0) + 1
+            }));
           }}
         />
       </div>
@@ -449,11 +587,17 @@ const QuestionDetail = () => {
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      <button className="flex items-center hover:text-primary-600">
+                      <button
+                        className="flex items-center hover:text-primary-600"
+                        onClick={() => setOpenCommentAnswerId(answer.id)}
+                      >
                         <MessageSquare className="h-4 w-4 mr-1" />
                         Comment
                       </button>
-                      <button className="flex items-center hover:text-primary-600">
+                      <button
+                        className="flex items-center hover:text-primary-600"
+                        onClick={() => handleShareAnswer(answer.id)}
+                      >
                         <Share2 className="h-4 w-4 mr-1" />
                         Share
                       </button>
@@ -461,6 +605,11 @@ const QuestionDetail = () => {
                   </div>
                 </div>
               </div>
+              {openCommentAnswerId === answer.id && (
+                <div className="mt-4">
+                  <Comments answerId={answer.id} onCommentAdded={() => setOpenCommentAnswerId(null)} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -470,61 +619,16 @@ const QuestionDetail = () => {
           <div className="mt-8 pt-6 border-t border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Answer</h3>
             <form onSubmit={handleSubmitAnswer}>
-              <div className="border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-primary-500 focus-within:border-transparent">
-                <JoditEditor
-                  ref={answerEditor}
+              <textarea
+                className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                rows={5}
+                placeholder="Write your answer here..."
                 value={newAnswer}
-                  config={{
-                    placeholder: "Write your answer here...",
-                    height: 200,
-                    toolbar: [
-                      'source', '|',
-                      'bold', 'italic', 'underline', 'strikethrough', '|',
-                      'font', 'fontsize', 'brush', 'paragraph', '|',
-                      'image', 'link', 'table', '|',
-                      'align', 'undo', 'redo', '|',
-                      'hr', 'eraser', 'copyformat', '|',
-                      'fullsize'
-                    ],
-                    buttons: [
-                      'source', '|',
-                      'bold', 'italic', 'underline', 'strikethrough', '|',
-                      'font', 'fontsize', 'brush', 'paragraph', '|',
-                      'image', 'link', 'table', '|',
-                      'align', 'undo', 'redo', '|',
-                      'hr', 'eraser', 'copyformat', '|',
-                      'fullsize'
-                    ],
-                    uploader: {
-                      insertImageAsBase64URI: true
-                    },
-                    showCharsCounter: true,
-                    showWordsCounter: true,
-                    showXPathInStatusbar: false,
-                    askBeforePasteHTML: true,
-                    askBeforePasteFromWord: true,
-                    defaultActionOnPaste: 'insert_clear_html',
-                    spellcheck: true,
-                    language: 'en',
-                    colorPickerDefaultTab: 'background',
-                    imageDefaultWidth: 300,
-                    removeButtons: ['about', 'print'],
-                    disablePlugins: 'paste-as-html',
-                    events: {
-                      beforePaste: function (event, html) {
-                        // Clean up pasted content
-                        return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-                      }
-                    }
-                  }}
-                  onBlur={(newContent) => setNewAnswer(newContent)}
-                  onChange={(newContent) => setNewAnswer(newContent)}
-                />
-              </div>
+                onChange={e => setNewAnswer(e.target.value)}
+              />
               <div className="mt-4 flex justify-end">
                 <button
                   type="submit"
-                  disabled={submittingAnswer}
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingAnswer ? 'Posting...' : 'Post Answer'}

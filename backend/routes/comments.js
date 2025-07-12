@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
-const { validateId } = require('../middleware/validation');
+const { validateId, validateQuestionId } = require('../middleware/validation');
 const { sendSuccessResponse, sendErrorResponse, asyncHandler } = require('../middleware/errorHandler');
 const { rateLimitByUser } = require('../middleware/rateLimit');
 const Comment = require('../models/Comment');
@@ -13,21 +13,18 @@ const { broadcastToQuestion } = require('../socket/socketHandlers');
 // Validation middleware for comment
 const validateComment = (req, res, next) => {
   const { content } = req.body;
-  
-  if (!content || content.trim().length < 15) {
+  if (!content || !content.trim()) {
     return sendErrorResponse(res, {
-      message: 'Comment must be at least 15 characters long',
+      message: 'Comment content is required',
       statusCode: 400
     });
   }
-  
   if (content.length > 1000) {
     return sendErrorResponse(res, {
       message: 'Comment cannot exceed 1000 characters',
       statusCode: 400
     });
   }
-  
   next();
 };
 
@@ -35,6 +32,7 @@ const validateComment = (req, res, next) => {
 // @desc    Create a new comment
 // @access  Private
 router.post('/', protect, validateComment, rateLimitByUser(20, 60 * 60 * 1000), asyncHandler(async (req, res) => {
+  console.log('POST /api/comments', req.body);
   const { content, questionId, answerId, parentCommentId } = req.body;
 
   // Validate that we have either questionId or answerId
@@ -113,7 +111,8 @@ router.post('/', protect, validateComment, rateLimitByUser(20, 60 * 60 * 1000), 
 // @route   GET /api/comments/question/:questionId
 // @desc    Get comments for a question
 // @access  Public
-router.get('/question/:questionId', validateId, asyncHandler(async (req, res) => {
+router.get('/question/:questionId', validateQuestionId, asyncHandler(async (req, res) => {
+  console.log('GET /api/comments/question/:questionId', req.params);
   const { page = 1, limit = 20 } = req.query;
   const skip = (page - 1) * limit;
 

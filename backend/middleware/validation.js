@@ -372,6 +372,11 @@ const validateUsername = [
   handleValidationErrors
 ];
 
+const validateQuestionId = [
+  param('questionId').isMongoId().withMessage('Invalid question ID'),
+  handleValidationErrors
+];
+
 module.exports = {
   handleValidationErrors,
   validateRegistration,
@@ -385,6 +390,7 @@ module.exports = {
   validateSearch,
   validatePagination,
   validateId,
+  validateQuestionId,
   validateTag,
   validateUserManagement,
   validateNotification,
