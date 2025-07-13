@@ -3,11 +3,11 @@ PORT=5000
 NODE_ENV=development
 
 # MongoDB Configuration
-MONGODB_URI=mongodb+srv://whiteturtle1:dvIw4evFuDVOzea3@cluster0.1e4vx.mongodb.net/odoo_hackathon?retryWrites=true&w=majority&appName=Cluster0
+MONGODB_URI=your_mongo_uri
 MONGODB_URI_PROD=mongodb+srv://username:password@cluster.mongodb.net/stackit
 
 # JWT Configuration
-JWT_SECRET=whiteturtlesworkspace
+JWT_SECRET=secret_key_jwt
 JWT_EXPIRE=7d
 
 # Cloudinary Configuration (for image uploads)
@@ -18,8 +18,8 @@ CLOUDINARY_API_SECRET=your-api-secret
 # Email Configuration (for notifications)
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-EMAIL_USER=hemalkatariya4488@gmail.com
-EMAIL_PASS=icbnqzszmzgksclm
+EMAIL_USER=your_email
+EMAIL_PASS=your_app_password
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000
