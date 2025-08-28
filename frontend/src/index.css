@@ -722,6 +722,7 @@ textarea.form-field {
   border: 1px solid #ccc;
 }
 
+<<<<<<< HEAD
 .language-select-container {
   width: 100%;
 }
@@ -1823,3 +1824,56 @@ button {
     align-items: stretch;
   }
 }
+=======
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Jodit Editor Custom Styles */
+.jodit-container {
+  border: none !important;
+}
+
+.jodit-toolbar {
+  border-bottom: 1px solid #e5e7eb !important;
+  background-color: #f9fafb !important;
+}
+
+.jodit-toolbar__box {
+  background-color: #f9fafb !important;
+}
+
+.jodit-workplace {
+  background-color: white !important;
+}
+
+.jodit-status-bar {
+  border-top: 1px solid #e5e7eb !important;
+  background-color: #f9fafb !important;
+}
+
+.jodit-ui-button {
+  color: #374151 !important;
+}
+
+.jodit-ui-button:hover {
+  background-color: #e5e7eb !important;
+}
+
+.jodit-ui-button__icon {
+  color: #374151 !important;
+}
+
+.jodit-ui-button_state_active {
+  background-color: #d1d5db !important;
+}
+
+.jodit-ui-list__item:hover {
+  background-color: #e5e7eb !important;
+}
+
+.jodit-ui-popup {
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+} 
+>>>>>>> 4a68f8bd99438c923c726855e48d7b052f7adf74

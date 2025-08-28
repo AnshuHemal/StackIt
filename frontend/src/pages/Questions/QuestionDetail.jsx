@@ -1,0 +1,657 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext.jsx';
+import { 
+  ThumbsUp, 
+  ThumbsDown, 
+  MessageSquare, 
+  Share2, 
+  Bookmark, 
+  Flag,
+  User,
+  Clock,
+  Eye,
+  Tag,
+  BookmarkCheck
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+// Remove JoditEditor import
+// import JoditEditor from 'jodit-react';
+import Comments from '../../components/Comments/Comments.jsx';
+
+const QuestionDetail = () => {
+  const { id } = useParams();
+  const { user, isAuthenticated } = useAuth();
+  const [question, setQuestion] = useState(null);
+  const [answers, setAnswers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newAnswer, setNewAnswer] = useState('');
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [votedItems, setVotedItems] = useState(() => {
+    // Load voted items from localStorage on component mount
+    const saved = localStorage.getItem('votedItems');
+    return saved ? new Map(JSON.parse(saved)) : new Map();
+  });
+  const [notFound, setNotFound] = useState(false);
+  const answerEditor = useRef(null);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [openCommentAnswerId, setOpenCommentAnswerId] = useState(null);
+
+  // Check bookmark status on mount or question change
+  useEffect(() => {
+    if (question) {
+      const bookmarks = JSON.parse(localStorage.getItem('bookmarkedQuestions') || '[]');
+      setIsBookmarked(bookmarks.includes(question.id));
+    }
+  }, [question]);
+
+  const handleBookmark = () => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to bookmark questions');
+      return;
+    }
+    const bookmarks = JSON.parse(localStorage.getItem('bookmarkedQuestions') || '[]');
+    let updated;
+    if (isBookmarked) {
+      updated = bookmarks.filter(qid => qid !== question.id);
+      toast('Removed from bookmarks');
+    } else {
+      updated = [...bookmarks, question.id];
+      toast('Bookmarked!');
+    }
+    localStorage.setItem('bookmarkedQuestions', JSON.stringify(updated));
+    setIsBookmarked(!isBookmarked);
+  };
+
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        toast.success('Link copied to clipboard!');
+      })
+      .catch(() => {
+        toast.error('Failed to copy link');
+      });
+  };
+
+  const handleFlag = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to flag questions');
+      return;
+    }
+    const reason = window.prompt('Why are you flagging this question? (e.g. spam, offensive, duplicate, other)');
+    if (!reason || !reason.trim()) {
+      toast('Flag cancelled');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/questions/${question.id}/flag`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ reason: reason.trim() })
+      });
+      if (response.ok) {
+        toast.success('Question flagged for moderation');
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to flag question');
+      }
+    } catch (error) {
+      toast.error('Failed to flag question');
+    }
+  };
+
+  useEffect(() => {
+    fetchQuestion();
+  }, [id]);
+
+  const fetchQuestion = async () => {
+    setLoading(true);
+    setNotFound(false);
+    try {
+      const response = await fetch(`/api/questions/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Defensive check for backend structure
+        if (!data.data || !data.data.question) {
+          setQuestion(null);
+          setNotFound(true);
+          return;
+        }
+        // Transform backend data to match frontend structure
+        const q = data.data.question;
+        const transformedQuestion = {
+          id: q._id,
+          title: q.title,
+          content: q.description,
+          author: {
+            username: q.author.username,
+            avatar: q.author.avatar,
+            reputation: q.author.reputation || 0
+          },
+          tags: q.tags,
+          votes: q.voteCount || 0,
+          views: q.views || 0,
+          answers: q.answerCount || 0,
+          createdAt: q.createdAt,
+          updatedAt: q.updatedAt
+        };
+        setQuestion(transformedQuestion);
+        // Fetch answers for this question
+        await fetchAnswers();
+      } else if (response.status === 404) {
+        setQuestion(null);
+        setNotFound(true);
+      } else {
+        console.error('Failed to fetch question');
+        toast.error('Failed to load question');
+        setQuestion(null);
+        setNotFound(true);
+      }
+    } catch (error) {
+      console.error('Error fetching question:', error);
+      toast.error('Failed to load question');
+      setQuestion(null);
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAnswers = async () => {
+    try {
+      const response = await fetch(`/api/questions/${id}/answers`);
+      if (response.ok) {
+        const data = await response.json();
+        // Defensive: ensure data.answers is an array
+        const answersArr = (data.answers || data.data?.answers || []);
+        const transformedAnswers = answersArr.map(answer => ({
+          id: answer._id,
+          content: answer.content,
+          author: {
+            username: answer.author.username,
+            avatar: answer.author.avatar,
+            reputation: answer.author.reputation || 0
+          },
+          votes: answer.voteCount || 0,
+          isAccepted: answer.isAccepted || false,
+          createdAt: answer.createdAt
+        }));
+        setAnswers(transformedAnswers);
+      } else {
+        console.error('Failed to fetch answers');
+      }
+    } catch (error) {
+      console.error('Error fetching answers:', error);
+    }
+  };
+
+  const handleVote = async (type, itemId, itemType) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to vote');
+      return;
+    }
+    
+    // Check if user has already voted on this item
+    if (votedItems.has(itemId)) {
+      toast.error('You have already voted on this item');
+      return;
+    }
+    
+    try {
+      const endpoint = itemType === 'question' 
+        ? `/api/questions/${itemId}/vote`
+        : `/api/answers/${itemId}/vote`;
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          voteType: type === 'up' ? 'upvote' : 'downvote'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (itemType === 'question') {
+          // Update question votes
+          setQuestion(prevQuestion => ({
+            ...prevQuestion,
+            votes: data.voteCount
+          }));
+        } else if (itemType === 'answer') {
+          // Update answer votes
+          setAnswers(prevAnswers => 
+            prevAnswers.map(answer => {
+              if (answer.id === itemId) {
+                return {
+                  ...answer,
+                  votes: data.voteCount
+                };
+              }
+              return answer;
+            })
+          );
+        }
+        
+        // Mark this item as voted with the vote type
+        const newVotedItems = new Map(votedItems);
+        newVotedItems.set(itemId, type);
+        setVotedItems(newVotedItems);
+        // Save to localStorage
+        localStorage.setItem('votedItems', JSON.stringify(Array.from(newVotedItems.entries())));
+        
+        toast.success(`${type === 'up' ? 'Upvoted' : 'Downvoted'} successfully`);
+      } else {
+        let errorMessage = 'Failed to vote';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Error voting on item:', error);
+      toast.error('Failed to vote on item');
+    }
+  };
+
+  const handleSubmitAnswer = async (e) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      toast.error('Please log in to answer');
+      return;
+    }
+    // Only check for non-empty input
+    if (!newAnswer.trim()) {
+      toast.error('Please enter an answer');
+      return;
+    }
+    setSubmittingAnswer(true);
+    try {
+      const response = await fetch(`/api/questions/${id}/answers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          content: newAnswer
+        })
+      });
+      if (response.status === 200 || response.status === 201) {
+        const data = await response.json();
+        if (!data.answer) {
+          toast.error('No answer returned from server');
+          return;
+        }
+        // Transform backend answer data to match frontend structure
+        const newAnswerObj = {
+          id: data.answer._id,
+          content: data.answer.content,
+          author: {
+            username: data.answer.author.username,
+            avatar: data.answer.author.avatar,
+            reputation: data.answer.author.reputation || 0
+          },
+          votes: data.answer.voteCount || 0,
+          isAccepted: data.answer.isAccepted || false,
+          createdAt: data.answer.createdAt
+        };
+        setAnswers(prev => [...prev, newAnswerObj]);
+        setNewAnswer('');
+        toast.success('Answer posted successfully!');
+      } else {
+        let errorMessage = 'Failed to post answer';
+        try {
+          const error = await response.json();
+          errorMessage = error.error || error.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          } catch (textError) {
+            console.error('Could not parse error response:', textError);
+          }
+        }
+        toast.error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Error posting answer:', error);
+      toast.error('Failed to post answer');
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  };
+
+  const handleShareAnswer = (answerId) => {
+    const url = `${window.location.origin}/questions/${id}#answer-${answerId}`;
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        toast.success('Answer link copied to clipboard!');
+      })
+      .catch(() => {
+        toast.error('Failed to copy link');
+      });
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-3/4 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
+          <div className="space-y-4">
+            <div className="h-4 bg-gray-200 rounded"></div>
+            <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+            <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <h1 className="text-2xl font-bold mb-2">Question Not Found</h1>
+        <p className="mb-4 text-gray-600">The question you're looking for doesn't exist or has been removed.</p>
+        <Link to="/questions" className="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">Back to Questions</Link>
+      </div>
+    );
+  }
+
+  if (!question) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Question Not Found</h2>
+          <p className="text-gray-600 mb-6">The question you're looking for doesn't exist or has been removed.</p>
+          <Link
+            to="/"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+          >
+            Back to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      {/* Question Header */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-6">
+        <div className="flex items-start space-x-4">
+          {/* Voting */}
+          <div className="flex flex-col items-center space-y-2">
+            <button
+              onClick={() => handleVote('up', question.id, 'question')}
+              className={`p-2 rounded transition-colors ${
+                votedItems.get(question.id) === 'up'
+                  ? 'bg-green-100 text-green-600 cursor-not-allowed' 
+                  : 'hover:bg-gray-100 text-gray-400 hover:text-green-600'
+              }`}
+              title="Upvote"
+              disabled={!!votedItems.get(question.id)}
+            >
+              <ThumbsUp className="h-5 w-5" />
+            </button>
+            <span className="text-lg font-semibold text-gray-900">{question.votes}</span>
+            <button
+              onClick={() => handleVote('down', question.id, 'question')}
+              className={`p-2 rounded transition-colors ${
+                votedItems.get(question.id) === 'down'
+                  ? 'bg-red-100 text-red-600 cursor-not-allowed' 
+                  : 'hover:bg-gray-100 text-gray-400 hover:text-red-600'
+              }`}
+              title="Downvote"
+              disabled={!!votedItems.get(question.id)}
+            >
+              <ThumbsDown className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Question Content */}
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">{question.title}</h1>
+            
+            <div className="prose max-w-none mb-6">
+              <div 
+                className="text-gray-700"
+                dangerouslySetInnerHTML={{ __html: question.content }}
+              />
+            </div>
+
+            {/* Tags */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {question.tags.map((tag, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                >
+                  <Tag className="h-3 w-3 mr-1" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+
+            {/* Question Meta */}
+            <div className="flex items-center justify-between text-sm text-gray-500">
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center">
+                  <User className="h-4 w-4 mr-1" />
+                  <Link to={`/profile/${question.author.username}`} className="hover:text-primary-600">
+                    {question.author.username}
+                  </Link>
+                </div>
+                <div className="flex items-center">
+                  <Clock className="h-4 w-4 mr-1" />
+                  {new Date(question.createdAt).toLocaleDateString()}
+                </div>
+                <div className="flex items-center">
+                  <Eye className="h-4 w-4 mr-1" />
+                  {question.views} views
+                </div>
+                <div className="flex items-center">
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  {question.commentCount || 0} comments
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <button className="p-1 hover:bg-gray-100 rounded" onClick={handleShare} title="Share">
+                  <Share2 className="h-4 w-4" />
+                </button>
+                <button
+                  className={`p-1 hover:bg-gray-100 rounded ${isBookmarked ? 'text-yellow-500' : ''}`}
+                  onClick={handleBookmark}
+                  title={isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
+                >
+                  {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                </button>
+                <button
+                  className="p-1 hover:bg-gray-100 rounded"
+                  onClick={handleFlag}
+                  title="Flag for moderation"
+                >
+                  <Flag className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Comments Section */}
+      <div className="bg-white shadow-sm rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-6">
+          Comments
+        </h2>
+        <Comments 
+          questionId={question.id} 
+          onCommentAdded={(comment) => {
+            setQuestion(prev => ({
+              ...prev,
+              commentCount: (prev.commentCount || 0) + 1
+            }));
+          }}
+        />
+      </div>
+
+      {/* Answers Section */}
+      <div className="bg-white shadow-sm rounded-lg p-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-6">
+          {answers.length} Answer{answers.length !== 1 ? 's' : ''}
+        </h2>
+
+        {/* Answers List */}
+        <div className="space-y-6">
+          {answers.map((answer) => (
+            <div key={answer.id} className="border-b border-gray-200 pb-6 last:border-b-0">
+              <div className="flex items-start space-x-4">
+                {/* Voting for answers */}
+                <div className="flex flex-col items-center space-y-2">
+                  <button
+                    onClick={() => handleVote('up', answer.id, 'answer')}
+                    className={`p-2 rounded transition-colors ${
+                      votedItems.get(answer.id) === 'up'
+                        ? 'bg-green-100 text-green-600 cursor-not-allowed' 
+                        : 'hover:bg-gray-100 text-gray-400 hover:text-green-600'
+                    }`}
+                    title="Upvote"
+                    disabled={!!votedItems.get(answer.id)}
+                  >
+                    <ThumbsUp className="h-5 w-5" />
+                  </button>
+                  <span className="text-lg font-semibold text-gray-900">{answer.votes}</span>
+                  <button
+                    onClick={() => handleVote('down', answer.id, 'answer')}
+                    className={`p-2 rounded transition-colors ${
+                      votedItems.get(answer.id) === 'down'
+                        ? 'bg-red-100 text-red-600 cursor-not-allowed' 
+                        : 'hover:bg-gray-100 text-gray-400 hover:text-red-600'
+                    }`}
+                    title="Downvote"
+                    disabled={!!votedItems.get(answer.id)}
+                  >
+                    <ThumbsDown className="h-5 w-5" />
+                  </button>
+                  {answer.isAccepted && (
+                    <div className="mt-2">
+                      <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs">✓</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Answer Content */}
+                <div className="flex-1">
+                  <div className="prose max-w-none mb-4">
+                    <div 
+                      className="text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: answer.content }}
+                    />
+                  </div>
+
+                  {/* Answer Meta */}
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center">
+                        <User className="h-4 w-4 mr-1" />
+                        <Link to={`/profile/${answer.author.username}`} className="hover:text-primary-600">
+                          {answer.author.username}
+                        </Link>
+                      </div>
+                      <div className="flex items-center">
+                        <Clock className="h-4 w-4 mr-1" />
+                        {new Date(answer.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <button
+                        className="flex items-center hover:text-primary-600"
+                        onClick={() => setOpenCommentAnswerId(answer.id)}
+                      >
+                        <MessageSquare className="h-4 w-4 mr-1" />
+                        Comment
+                      </button>
+                      <button
+                        className="flex items-center hover:text-primary-600"
+                        onClick={() => handleShareAnswer(answer.id)}
+                      >
+                        <Share2 className="h-4 w-4 mr-1" />
+                        Share
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {openCommentAnswerId === answer.id && (
+                <div className="mt-4">
+                  <Comments answerId={answer.id} onCommentAdded={() => setOpenCommentAnswerId(null)} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Your Answer */}
+        {isAuthenticated && (
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Answer</h3>
+            <form onSubmit={handleSubmitAnswer}>
+              <textarea
+                className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                rows={5}
+                placeholder="Write your answer here..."
+                value={newAnswer}
+                onChange={e => setNewAnswer(e.target.value)}
+              />
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submittingAnswer ? 'Posting...' : 'Post Answer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {!isAuthenticated && (
+          <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+            <p className="text-gray-600 mb-4">Please log in to answer this question.</p>
+            <Link
+              to="/login"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+            >
+              Sign in to Answer
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default QuestionDetail; 
